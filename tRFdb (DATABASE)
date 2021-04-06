@@ -132,7 +132,7 @@ with open("trna.fa", "w") as out:
 
 
 with open("trfdb.gff3", 'w') as out:
-    header = "##gff-version 3"+"\n"+"##date 2021-01-13"+"\n"+"#"+"\n"+"# Chromosomal coordinates of Homo sapiens tRFs"+"\n"+"# tRFs:               tRFdb 2012"+"\n"+"# genome-build-id:         GRCh19"+"\n"+"#genome-build-accession:  NCBI_Assembly:GCA_000001405.15"+"\n"+"#"+"\n"+"# tRNA precursor sequences have type \"tRNA\"" +"\n"+"#Fragments of tRNA sequences have type \"tRF\"."
+    header = "##gff-version 3"+"\n"+"##date 2021-01-13"+"\n"+"#"+"\n"+"# Chromosomal coordinates of Homo sapiens tRFs"+"\n"+"# tRFs:               tRFdb 2012"+"\n"+"# genome-build-id:         GRCh19"+"\n"+"#genome-build-accession:  NCBI_Assembly:GCA_000001405.15"+"\n"+"#"+"\n"+"# tRNA precursor sequences have type \"miRNA_primary_transcript\"" +"\n"+"#Fragments of tRNA sequences have type \"miRNA\"."
     out.write(header+'\n')
     
     for keys,values in d_gff_tRNA.items():
