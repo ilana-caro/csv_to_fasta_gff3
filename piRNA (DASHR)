@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Jan 25 16:01:41 2021
+
+@author: ilanacaro
+"""
+data = open("ENCODE_file.csv")
+
+d_fa_piRNA = {} # Alias -> sequence
+d_fa_piRNA_precursor = {} 
+
+d_gff_piRNA = {} # Alias -> chromosome, tRF/tRNA, start, end, sens (if start>end, sens="-", start=end, end=start; else sens="+"), ID, Alias, Name, Derives_from
+d_gff_piRNA_precursor = {}
+
+liste_IDpiRNA = []
+liste_seq_piRNA = []
+liste_IDpiRNA_precursor = []
+
+ID_piRNA=""
+chr_piRNA=""
+start_piRNA=""
+end_piRNA=""
+sens_piRNA=""
+seq_piRNA=""
+ID_piRNA_precursor=""
+
+
+header = next(data)
+header_elts = header.split("\n")[0].split(",") # Split on endline, then on sep
+
+for line in data :
+    ## Retrieve all elts of interest
+    elts = line.split("\n")[0].split(",")
+    for elt, header_elt in zip(elts, header_elts):
+        if header_elt == "rnaClass":
+            class_rna = elt 
+             #liste_class_rna += class_rna
+        elif header_elt == "entryID":
+             ID_rna = elt
+        elif header_elt == "chr":
+             chr_rna = elt
+        elif header_elt == "chrStart":
+             start_rna = elt 
+        elif header_elt == "chrEnd":
+             end_rna = elt 
+        elif header_elt == "strand":
+             sens_rna = elt 
+        elif header_elt == "seq":
+             seq_rna = elt.upper().replace('U','T')
+            
+   
+    #Selection of piRNA specificaly :
+    if class_rna == "piRNA":
+        ID_piRNA = ID_rna
+        chr_piRNA = chr_rna
+        start_piRNA = start_rna
+        end_piRNA = end_rna
+        sens_piRNA = sens_rna
+        seq_piRNA = seq_rna
+        ID_piRNA_precursor = ID_rna+"_precursor" #This step is needed to use the gff3 file for Optimir pipeline but can be suppress for other need of the final files
+    
+    #The type of piRNA = miRNA and type of piRNA_precursor = miRNA_primary_transcript so that the gff3 file can be read by Optimir Pipeline
+    if ID_piRNA in d_gff_piRNA:
+        print("Warning: alias already in dict") # Should not happen, but good to check
+            
+    d_gff_piRNA[ID_piRNA]= {"CHR": chr_piRNA, "Type": "miRNA","START": start_piRNA, "END": end_piRNA, "SENS":sens_piRNA, "ID":ID_piRNA, "Name":ID_piRNA,"Alias":ID_piRNA,"Derives_from":ID_piRNA_precursor}
+   
+    if ID_piRNA_precursor in d_gff_piRNA_precursor:
+        print("Warning: alias already in dict")
+    
+    d_gff_piRNA_precursor[ID_piRNA_precursor]={"CHR": chr_piRNA, "Type": "miRNA_primary_transcript","START": start_piRNA, "END": end_piRNA, "SENS":sens_piRNA, "ID":ID_piRNA_precursor, "Name":ID_piRNA_precursor,"Alias":ID_piRNA_precursor}
+
+   
+    liste_IDpiRNA+= [ID_piRNA]
+    liste_seq_piRNA += [seq_piRNA]
+    liste_IDpiRNA_precursor += [ID_piRNA_precursor]
+    
+   
+    ## Populate dicts:
+    ## 1. piRNA seqs to build piRNA fasta file
+
+if ID_piRNA in d_fa_piRNA:
+    print("Warning: alias already in dict") # Should not happen, but good to check
+
+d_fa_piRNA= {ID:sequence for ID,sequence in zip(liste_IDpiRNA, liste_seq_piRNA)}
+
+   
+     ## 2. piRNA_precursor seqs to build piRNA_precursor fasta file
+if ID_piRNA_precursor in d_fa_piRNA_precursor:
+    print("Warning: alias already in dict") # Should not happen, but good to check
+
+d_fa_piRNA_precursor ={a:b for a,b in zip(liste_IDpiRNA_precursor,liste_seq_piRNA)}
+
+
+## Then Write 3 files:
+with open("piRNA.fa", "w") as out:
+    for ID_piRNA, seq_piRNA in d_fa_piRNA.items():
+        out.write((">"+ID_piRNA+"\n"+seq_piRNA+"\n").replace(" ",""))
+        
+
+with open("piRNA_precursor.fa", "w") as out:
+    for ID_piRNA_precursor, seq_piRNA in d_fa_piRNA_precursor.items(): 
+        out.write((">"+ID_piRNA_precursor+"\n"+seq_piRNA+"\n").replace(" ",""))
+
+
+with open("piRNA.gff3", 'w') as out:
+    header = "##gff-version 3"+"\n"+"##date 2021-01-25"+"\n"+"#"+"\n"+"# Chromosomal coordinates of Homo sapiens piRNA"+"\n"+"# piRNA:               DASHR 2018"+"\n"+"# genome-build-id:         GRCh38"+"\n"+"#genome-build-accession:  NCBI_Assembly:GCA_000001405.15"+"\n"+"#"+"\n"+"# piRNA precursor sequences have type \"miRNA_primary_transcript\"" +"\n"+"#piRNA have type \"miRNA\"."
+    ##write header, maybe copy/adapt the one from mirbase
+    out.write(header+'\n')
+    
+    for keys,values in d_gff_piRNA.items():
+            l_out=str(values["CHR"])+ "\t.\t" + str(values["Type"]) + "\t" + str(values["START"])+ '\t' + str(values["END"])+ "\t.\t" + str(values["SENS"]) + "\t.\t" +"ID="+str(values["ID"])+ ";" + "Alias="+str(values["Alias"]) + ";" +"Name="+str(values["Name"])+";"+"Derives_from="+str(values["Derives_from"])+'\n'
+            l_out=l_out.replace(" ","")
+            out.write(l_out)
+          
+    for key, values in d_gff_piRNA_precursor.items():
+             l_out2=str(values["CHR"])+ "\t.\t" + str(values["Type"]) + "\t" + str(values["START"]) + '\t' + str(values["END"])+ "\t.\t" + str(values["SENS"]) + "\t.\t" + "ID="+str(values["ID"])+ ";" +"Alias="+str(values["Alias"]) + ";" +"Name="+str(values["Name"])+'\n'
+             l_out2=l_out2.replace(" ","")
+             out.write(l_out2)
+             
+out.close()
+  
+ 
+    
+
+    
