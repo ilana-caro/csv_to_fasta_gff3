@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Jan 15 10:12:48 2021
+
+@author ilanacaro
+"""
+
+tbl = open("tRFdb_file.csv")
+
+d_fa_trf = {} # Alias -> sequence
+d_fa_trna = {} # Alias -> sequence
+d_gff_tRF = {} # Alias -> chromosome, tRF/tRNA, start, end, sens (if start>end, sens="-", start=end, end=start; else sens="+"), ID, Alias, Name, Derives_from
+d_gff_tRNA ={} # Alias -> chromosome, tRNA, start, end, sens (if start>end, sens="-", start=end, end=start; else sens="+"), ID, Alias, Name
+
+liste_aliastrna = []
+liste_aliastrf = []
+liste_seq_tRNA = []
+liste_seq_trf = []
+
+sens=""
+alias_trf=""
+chrom=""
+start_trf=""
+end_trf=""
+alias_trna=""
+start_trna=""
+end_trna=""
+seq_trna=""
+seq_trf=""
+
+
+header = next(tbl)
+header_elts = header.split("\n")[0].split(",") # Split on endline, then on sep
+
+for line in tbl:
+   ## Retrieve all elts of interest
+   elts = line.split("\n")[0].split(",")
+   for elt, header_elt in zip(elts, header_elts):
+      if header_elt == "tRF ID":
+          ID_trf = elt
+          #print(ID_trf)
+      if header_elt == " Type":
+          trf_type = elt
+          #print(trf_type)
+           
+      elif header_elt == " tRNA Gene Co-ordinates":
+           coords = elt.split("-") # split will give a list with [chr, start, end]
+           chrom = coords[0]
+           start_trna = int(coords[1])
+           end_trna = int(coords[2])
+           ## Correct tRNA coordinates / sens
+           if start_trna > end_trna:
+               sens = "-"
+               tmp = start_trna
+               start_trna = end_trna
+               end_trna = tmp
+
+           else:
+               sens = "+"
+
+      elif header_elt == " tRNA Name": 
+           alias_trna = elt
+           alias_trf = alias_trna + '.' + trf_type + '.' + ID_trf
+      elif header_elt == " tRNA Sequence":
+           seq = elt
+           seq_trna = seq.replace("5' ","").replace(" 3'","").replace(" ","") #The sequence is written with the 3'-5' notation, this allows us to have the sequence without anotations
+      elif header_elt == " tRF Map Positions":
+           coord = elt.split(" - ") #Coordinates are written with the form : Start-End, this step split the "-"
+           start_trf = int(coord[0].replace("Start:", ""))
+           end_trf = int(coord[1].replace("End:", ""))
+      elif header_elt == " tRF Sequence":
+           seq_trf = elt.replace(" ", "")
+   
+ 
+   if sens == "+": #The coordinates of the tRF are calculated from those of the tRNA, here they are calculated according to the whole genome 
+       start_trf = start_trf - 1 + start_trna
+       end_trf = end_trf-1 + start_trna 
+ 
+   elif sens == "-": When the strand is "-" the coordinates needs to be calculated according to the forward strand 
+       tmp = start_trf
+       start_trf = end_trna - (end_trf -1)
+       end_trf = end_trna - (tmp -1)
+
+   #Here, type of tRF = miRNA and type of tRNA : miRNA_primary_transcript so that the gff3 file created can be read by Optimir pipeline  
+   if alias_trf in d_gff_tRF:
+       print("Warning: alias already in dict") # Should not happen, but good to check
+       
+   d_gff_tRF[alias_trf]= {"CHR": chrom, "Type": "miRNA","START": start_trf, "END": end_trf, "SENS":sens, "ID":alias_trf, "Name":alias_trf,"Alias":alias_trf, "Derives_from": alias_trna}
+   
+   if alias_trna in d_gff_tRNA:
+       print("Warning: alias already in dict") # Should not happen, but good to check
+
+   d_gff_tRNA[alias_trna]={"CHR": chrom, "Type": "miRNA_primary_transcript", "START": start_trna, "END": end_trna, "SENS":sens, "ID":alias_trna,"Name":alias_trna, "Alias":alias_trna}
+    
+    
+   liste_aliastrna += [alias_trna]
+   liste_aliastrf += [alias_trf]
+   liste_seq_tRNA += [seq_trna]
+   liste_seq_trf += [seq_trf]
+    
+ 
+    ## Populate dicts:
+    ## 1. trf seqs to build tRF fasta file
+
+if alias_trf in d_fa_trf:
+    print("Warning: alias already in dict") # Should not happen, but good to check
+
+d_fa_trf= {alias:sequence for alias,sequence in zip(liste_aliastrf, liste_seq_trf)}
+
+
+    
+    ## 2. trna seqs to build tRNA fasta file
+    
+if alias_trna in d_fa_trna:
+    print("Warning: alias already in dict") # Should not happen, but good to check
+
+d_fa_trna ={a:b for a,b in zip(liste_aliastrna,liste_seq_tRNA)}
+
+
+
+## Then Write 3 files:
+
+with open("trf.fa", "w") as out:
+    for alias_trf, seq_trf in d_fa_trf.items():
+        out.write((">"+alias_trf+"\n"+seq_trf+"\n").replace(" ",""))
+         
+with open("trna.fa", "w") as out:
+    for alias_trna, seq_trna in d_fa_trna.items(): 
+        out.write((">"+alias_trna+"\n"+seq_trna+"\n").replace(" ",""))
+         
+
+
+with open("trfdb.gff3", 'w') as out:
+    header = "##gff-version 3"+"\n"+"##date 2021-01-13"+"\n"+"#"+"\n"+"# Chromosomal coordinates of Homo sapiens tRFs"+"\n"+"# tRFs:               tRFdb 2012"+"\n"+"# genome-build-id:         GRCh19"+"\n"+"#genome-build-accession:  NCBI_Assembly:GCA_000001405.15"+"\n"+"#"+"\n"+"# tRNA precursor sequences have type \"tRNA\"" +"\n"+"#Fragments of tRNA sequences have type \"tRF\"."
+    out.write(header+'\n')
+    
+    for keys,values in d_gff_tRNA.items():
+            l_out1=str(values["CHR"])+ "\t.\t" + str(values["Type"]) + "\t" + str(values["START"])+ '\t' + str(values["END"])+ "\t.\t" + str(values["SENS"]) + "\t.\t" +"ID="+str(values["ID"])+ ";" + "Alias="+str(values["Alias"]) + ";" +"Name="+str(values["Name"])+'\n'
+            l_out1=l_out1.replace(" ","")
+            out.write(l_out1)
+           
+    
+    for key, values in d_gff_tRF.items():
+            l_out2=str(values["CHR"])+ "\t.\t" + str(values["Type"]) + "\t" + str(values["START"]) + '\t' + str(values["END"])+ "\t.\t" + str(values["SENS"]) + "\t.\t" + "ID="+str(values["ID"])+ ";" +"Alias="+str(values["Alias"]) + ";" +"Name="+str(values["Name"])+';'+"Derives_from="+str(values['Derives_from'])+'\n'
+            l_out2=l_out2.replace(" ","")
+            out.write(l_out2)
+           
+out.close()
+   
