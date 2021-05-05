@@ -1,0 +1,113 @@
+data = open("path to snoRNA/snRNA file.tsv")
+
+d_fa_snoRNA = {}
+d_fa_snoRNA_precursor={}
+
+d_gff_snoRNA = {} # Alias -> chromosome, snoRNA/snRNA, start, end, sens (if start>end, sens="-", start=end, end=start; else sens="+"), ID, Alias, Name, Derives_from
+d_gff_snoRNA_precursor = {}
+
+liste_IDsnoRNA = []
+liste_seq_snoRNA = []
+liste_IDsnoRNA_precursor = []
+
+ID_rna=""
+chr_rna=""
+start_rna=""
+end_rna=""
+sens_rna=""
+seq_rna=""
+Alias_rna=""
+ID_rna_precursor=""
+
+ID_snoRNA=""
+chr_snoRNA=""
+start_snoRNA=""
+end_snoRNA=""
+sens_snoRNA=""
+seq_snoRNA=""
+ID_snoRNA_precursor=""
+
+
+header = next(data)
+header_elts = header.split("\n")[0].split("\t") # Split on endline, then on sep
+
+for line in data :
+    ## Retrieve all elts of interest
+    elts = line.split("\n")[0].split("\t")
+    for elt, header_elt in zip(elts, header_elts):
+        if header_elt == "Symbol":
+             ID_rna = elt
+        elif header_elt == "Synonym":
+             Alias_rna = elt
+        elif header_elt == "Chromosome":
+             chr_rna = "chr"+elt
+        elif header_elt == "Start":
+             start_rna = elt 
+        elif header_elt == "End":
+             end_rna = elt 
+        elif header_elt == "Strand":
+             sens_rna = elt 
+        elif header_elt == "Sequence":
+             seq_rna = elt
+             
+   
+        ID_rna_precursor = ID_rna+"_precursor"
+ 
+    if ID_rna in d_gff_snoRNA:
+        print("Warning: alias already in dict") # Should not happen, but good to check
+            #Ici on change le type tRF en miRNA et tRNA en miRNA_primary_transcript pour que ça puisse être bien lu par OptimiR
+    d_gff_snoRNA[ID_rna]= {"CHR": chr_rna, "Type": "miRNA","START": start_rna, "END": end_rna, "SENS":sens_rna, "ID":ID_rna, "Name":ID_snoRNA,"Alias":Alias_rna,"Derives_from":ID_rna_precursor}
+   
+    if ID_rna_precursor in d_gff_snoRNA_precursor:
+        print("Warning: alias already in dict")
+    d_gff_snoRNA_precursor[ID_rna_precursor]={"CHR": chr_rna, "Type": "miRNA_primary_transcript","START": start_rna, "END": end_rna, "SENS":sens_rna, "ID":ID_rna_precursor, "Name":ID_rna_precursor,"Alias":ID_rna_precursor}
+
+    
+    liste_IDsnoRNA+= [ID_rna]
+    liste_seq_snoRNA += [seq_rna]
+    liste_IDsnoRNA_precursor += [ID_rna_precursor]
+    
+   
+    ## Populate dicts:
+    ## 1. snRNA seqs to build snRNA fasta file
+
+if ID_rna in d_fa_snoRNA:
+    print("Warning: alias already in dict") # Should not happen, but good to check
+
+d_fa_snoRNA= {ID:sequence for ID,sequence in zip(liste_IDsnoRNA, liste_seq_snoRNA)}
+
+   
+     ## 2. trna seqs to build snoRNA_precursor fasta file
+if ID_rna_precursor in d_fa_snoRNA_precursor:
+    print("Warning: alias already in dict") # Should not happen, but good to check
+
+d_fa_snoRNA_precursor ={a:b for a,b in zip(liste_IDsnoRNA_precursor,liste_seq_snoRNA)}
+
+
+## Then Write 3 files:
+with open("snoRNA_test.fa", "w") as out:
+    for ID_rna, seq_rna in d_fa_snoRNA.items():
+        out.write((">"+ID_rna+"\n"+seq_rna+"\n").replace(" ",""))
+        
+
+with open("snoRNA_precursor_test.fa", "w") as out:
+    for ID_rna_precursor, seq_rna in d_fa_snoRNA_precursor.items(): 
+        out.write((">"+ID_rna_precursor+"\n"+seq_rna+"\n").replace(" ",""))
+
+
+with open("snoRNA_test.gff3", 'w') as out:
+    header = "##gff-version 3"+"\n"+"##date ..."+"\n"+"#"+"\n"+"# Chromosomal coordinates of Homo sapiens snoRNA"+"\n"+"# snoRNA:               Falaleeva et al, 2013"+"\n"+"# genome-build-id:         GRCh38"+"\n"+"#genome-build-accession:  NCBI_Assembly:GCA_000001405.15"+"\n"+"#"+"\n"+"# snoRNA precursor sequences have type \"miRNA_primary_transcript\"" +"\n"+"#snRNA sequences have type \"miRNA\"."
+    ##write header, maybe copy/adapt the one from mirbase
+    out.write(header+'\n')
+    
+    for keys,values in d_gff_snoRNA.items():
+            l_out=str(values["CHR"])+ "\t.\t" + str(values["Type"]) + "\t" + str(values["START"])+ '\t' + str(values["END"])+ "\t.\t" + str(values["SENS"]) + "\t.\t" +"ID="+str(values["ID"])+ ";" + "Alias="+str(values["Alias"]) + ";" +"Name="+str(values["Name"])+";"+"Derives_from="+str(values["Derives_from"])+'\n'
+            l_out=l_out.replace(" ","")
+            out.write(l_out)
+          
+    for key, values in d_gff_snoRNA_precursor.items():
+             l_out2=str(values["CHR"])+ "\t.\t" + str(values["Type"]) + "\t" + str(values["START"]) + '\t' + str(values["END"])+ "\t.\t" + str(values["SENS"]) + "\t.\t" + "ID="+str(values["ID"])+ ";" +"Alias="+str(values["Alias"]) + ";" +"Name="+str(values["Name"])+'\n'
+             l_out2=l_out2.replace(" ","")
+             out.write(l_out2)
+             
+out.close()
